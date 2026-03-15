@@ -1,21 +1,21 @@
 import { createSupabaseServer } from "@/lib/supabaseServer";
 import { createChatController, listChatsController } from "@/controllers/chat.controller";
 
-export async function POST(req) {
+export async function POST(req){
 
-  const supabase = createSupabaseServer();
+  const supabase = await createSupabaseServer();
 
   const {
-    data: { user }
+    data:{user}
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if(!user){
+    return Response.json({error:"Unauthorized"},{status:401});
   }
 
-  const { title } = await req.json();
+  const {prompt} = await req.json();
 
-  const chat = await createChatController(user.id, title);
+  const chat = await createChatController(user.id,prompt);
 
   return Response.json(chat);
 
@@ -23,7 +23,7 @@ export async function POST(req) {
 
 export async function GET(req) {
 
-  const supabase = createSupabaseServer();
+  const supabase = await createSupabaseServer();
 
   const {
     data: { user }

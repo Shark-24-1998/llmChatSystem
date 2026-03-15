@@ -1,8 +1,15 @@
 import { createChat, getChats } from "../models/chat.model.js";
+import { generateChatTitle } from "../services/title.service.js";
 
-export const createChatController = async (userId, title) => {
+export const createChatController = async (userId,prompt) => {
 
-  const chat = await createChat(userId, title || "New Chat");
+  if(!userId){
+    throw new Error("userId required");
+  }
+
+  const title = await generateChatTitle(prompt);
+
+  const chat = await createChat(userId,title);
 
   return chat;
 
