@@ -1,26 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 
-export const createSupabaseServer = async () => {
-
-  const cookieStore = await cookies();
-
+export const createSupabaseServer = (req) => {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          if (!req || !req.headers) return [];
+
+          const cookieHeader = req.headers.get("cookie") || "";
+
+          if (!cookieHeader) return [];
+
+          return cookieHeader.split(";").map((cookie) => {
+            const [name, ...rest] = cookie.trim().split("=");
+            return {
+              name,
+              value: rest.join("="),
+            };
+          });
         },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {}
-        }
-      }
+        setAll() {},
+      },
     }
   );
 };

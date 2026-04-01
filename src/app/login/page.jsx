@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
 import { MdEmail, MdLock, MdLayers } from "react-icons/md"
 import { FcGoogle } from "react-icons/fc"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 export default function Login() {
   const [email, setEmail] = useState("")
@@ -11,18 +12,42 @@ export default function Login() {
   const [mode, setMode] = useState("login")
   const [message, setMessage] = useState("")
 
-  const signup = async () => {
-    const { error } = await supabase.auth.signUp({ email, password })
-    setMessage(error ? error.message : "Check your email to confirm signup!")
+  const router = useRouter()
+
+ const signup = async () => {
+  const { error } = await supabase.auth.signUp({ email, password });
+
+  if (error) {
+    setMessage(error.message);
+    return;
   }
 
-  const login = async () => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setMessage(error.message)
+  setMessage("Check your email to confirm signup!");
+};
+
+ const login = async () => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+  if (error) {
+    setMessage(error.message)
+    return
   }
+
+  if (!data.session) {
+    setMessage("No session created")
+    return
+  }
+
+  router.push("/chat")
+}
 
   const google = async () => {
-    await supabase.auth.signInWithOAuth({ provider: "google" })
+    await supabase.auth.signInWithOAuth({ 
+      provider: "google",
+      options:{
+        redirectTo:`${location.origin}/auth/callback`
+      } 
+    })
   }
 
   return (

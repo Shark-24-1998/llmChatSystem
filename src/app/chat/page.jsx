@@ -1,21 +1,45 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatWindow from "@/components/ChatWindow";
+import { useRouter } from "next/navigation";
 
 export default function ChatPage() {
 
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
+    const router = useRouter()
 
     useEffect(() => {
-        loadChats();
+        const init = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                router.push("/login");
+                return;
+            }
+
+            await loadChats(); // only after session confirmed
+        };
+
+        init();
     }, []);
 
     const loadChats = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
 
-        const res = await fetch("/api/chats");
+        if (!session) {
+            console.error("No session");
+            return;
+        }
+
+        const res = await fetch("/api/chats", {
+            headers: {
+                Authorization: `Bearer ${session.access_token}`,
+            },
+        });
 
         if (!res.ok) {
             console.error("Failed to load chats");
@@ -23,13 +47,11 @@ export default function ChatPage() {
         }
 
         const data = await res.json();
-
         setChats(data);
 
         if (data.length > 0) {
             setActiveChat(data[0].id);
         }
-
     };
 
     return (
