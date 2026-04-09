@@ -28,7 +28,21 @@ export async function GET(req) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const chats = await listChatsController(user.id);
+  // 🔥 Ensure user exists
+  const { error: upsertError } = await supabase
+    .from("users")
+    .upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    });
+
+  if (upsertError) {
+    console.error("USER UPSERT ERROR:", upsertError);
+  }
+
+  const chats = await listChatsController(supabase, user.id);
 
   return Response.json(chats);
 }
@@ -60,9 +74,23 @@ export async function POST(req) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 🔥 Ensure user exists
+  const { error: upsertError } = await supabase
+    .from("users")
+    .upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    });
+
+  if (upsertError) {
+    console.error("USER UPSERT ERROR:", upsertError);
+  }
+
   const { prompt } = await req.json();
 
-  const chat = await createChatController(user.id, prompt);
+  const chat = await createChatController(supabase, user.id, prompt);
 
   return Response.json(chat);
 }

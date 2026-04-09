@@ -1,7 +1,4 @@
-import { supabase } from "@/lib/supabase";
-
-
-export const createChat = async (userId, title) => {
+export const createChat = async (supabase, userId, title) => {
 
   const { data, error } = await supabase
     .from("chats")
@@ -17,10 +14,9 @@ export const createChat = async (userId, title) => {
   if (error) throw error;
 
   return data;
-
 };
 
-export const getChats = async (userId) => {
+export const getChats = async (supabase, userId) => {
 
   const { data, error } = await supabase
     .from("chats")
@@ -31,5 +27,4 @@ export const getChats = async (userId) => {
   if (error) throw error;
 
   return data;
-
 };

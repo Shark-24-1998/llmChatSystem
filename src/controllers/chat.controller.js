@@ -1,7 +1,7 @@
 import { createChat, getChats } from "../models/chat.model.js";
 import { generateChatTitle } from "../services/title.service.js";
 
-export const createChatController = async (userId,prompt) => {
+export const createChatController = async (supabase, userId,prompt) => {
 
   if(!userId){
     throw new Error("userId required");
@@ -9,15 +9,15 @@ export const createChatController = async (userId,prompt) => {
 
   const title = await generateChatTitle(prompt);
 
-  const chat = await createChat(userId,title);
+  const chat = await createChat(supabase, userId,title);
 
   return chat;
 
 };
 
-export const listChatsController = async (userId) => {
+export const listChatsController = async (supabase, userId) => {
 
-  const chats = await getChats(userId);
+  const chats = await getChats(supabase, userId);
 
   return chats;
 
