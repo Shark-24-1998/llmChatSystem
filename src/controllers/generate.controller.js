@@ -9,6 +9,8 @@ import {
   extractGoal
 } from "../services/profile.service.js";
 import { inferSkillFromBehavior } from "../services/behavior.service.js";
+import { createEmbedding } from "@/services/embedding.service.js";
+import { searchDocuments } from "@/services/document.service.js";
 
 export const generateController = async (supabase, prompt, chatId) => {
 
@@ -153,12 +155,28 @@ export const generateController = async (supabase, prompt, chatId) => {
     }
   }
 
+  //9. RAG SEARCH
+  const queryEmbedding = await createEmbedding(prompt);
+
+  const docs = await searchDocuments(supabase, queryEmbedding);
+
+  const context = docs.map(d => d.content).join("\n\n");
+
+  console.log("RAG CONTEXT:", context);
 
 
-  // 9. BUILD FINAL CONVERSATION (PROFILE SHOULD BE LAST IN MEMORY SERVICE)
+  // 10. BUILD FINAL CONVERSATION (PROFILE SHOULD BE LAST IN MEMORY SERVICE)
   const conversationContent = buildConversation(history, summary, userProfile);
 
-  // 10. CALL LLM
+  conversationContent.unshift({
+    role: "system",
+    content: `Relevant Knowledge:\n${context}`
+  });
+
+
+
+
+  // 11. CALL LLM
   const providerStream = await callLLMStream(conversationContent);
 
   const reader = providerStream.getReader();
@@ -178,7 +196,7 @@ export const generateController = async (supabase, prompt, chatId) => {
         controller.enqueue(value);
       }
 
-      // 11. SAVE ASSISTANT RESPONSE
+      // 12. SAVE ASSISTANT RESPONSE
       await saveMessage(supabase, chatId, "assistant", assistantResponse);
 
       controller.close();
