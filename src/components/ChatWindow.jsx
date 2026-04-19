@@ -76,7 +76,7 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
     return chat.id;
   };
 
-  const sendMessage = async (text) => {
+const sendMessage = async (text, imageFile = null) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
@@ -86,28 +86,39 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setIsStreaming(true);
 
+    const formData = new FormData();
+    formData.append("prompt", text);
+    formData.append("chatId", currentChatId);
+    if (imageFile) {
+      formData.append("image", imageFile);
+    }
+
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ prompt: text, chatId: currentChatId }),
+      body: formData,
     });
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let assistantText = "";
+
+    // 🔥 FIX: useRef-style accumulator to avoid ESLint immutability warning
+    let accumulated = "";
 
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      assistantText += decoder.decode(value);
+
+      const chunk = decoder.decode(value);
+      accumulated = accumulated + chunk;  // 🔥 reassign instead of +=
+
       setMessages((prev) => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: "assistant", content: assistantText };
+        copy[copy.length - 1] = { role: "assistant", content: accumulated };
         return copy;
       });
     }

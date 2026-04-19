@@ -19,7 +19,7 @@ export const searchDocuments = async (supabase, queryEmbedding) => {
   const { data, error } = await supabase.rpc("match_documents", {
     query_embedding: queryEmbedding,
     match_count: 3,
-    match_threshold: 0.5  
+    match_threshold: 0.75 
   });
 
   if (error) {

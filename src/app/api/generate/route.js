@@ -1,3 +1,5 @@
+// src/app/api/generate/route.js
+
 import { generateController } from "@/controllers/generate.controller";
 import { createClient } from "@supabase/supabase-js";
 
@@ -28,7 +30,6 @@ export async function POST(req) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 🔥 Ensure user exists
   const { error: upsertError } = await supabase
     .from("users")
     .upsert({
@@ -42,9 +43,32 @@ export async function POST(req) {
     console.error("USER UPSERT ERROR:", upsertError);
   }
 
-  const { prompt, chatId } = await req.json();
+  // 🔥 CHANGED: formData instead of json
+  const formData = await req.formData();
+  const prompt = formData.get("prompt");
+  const chatId = formData.get("chatId");
+  const imageFile = formData.get("image") ?? null;
 
-  const stream = await generateController(supabase, prompt, chatId);
+  // 🔥 Convert image to base64 if present
+  let imageBase64 = null;
+  let imageMimeType = null;
+
+  if (imageFile) {
+    const arrayBuffer = await imageFile.arrayBuffer();
+    imageBase64 = Buffer.from(arrayBuffer).toString("base64");
+    imageMimeType = imageFile.type;
+    console.log("IMAGE RECEIVED:", imageMimeType, imageBase64.length, "chars");
+  } else {
+    console.log("NO IMAGE — text only");
+  }
+
+  const stream = await generateController(
+    supabase,
+    prompt,
+    chatId,
+    imageBase64,
+    imageMimeType
+  );
 
   return new Response(stream, {
     headers: {
