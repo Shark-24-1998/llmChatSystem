@@ -25,11 +25,17 @@ export default function MessageInput({ onSend, disabled }) {
     fileInputRef.current.value = "";
   };
 
+  const textareaRef = useRef(null);
+
   const send = () => {
     if ((!text.trim() && !imageFile) || disabled) return;
-    onSend(text, imageFile);  // 🔥 pass imageFile up to ChatWindow
+    onSend(text, imageFile);
     setText("");
     removeImage();
+    // 🔥 reset textarea height back to original
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
   const handleKey = (e) => {
@@ -50,8 +56,9 @@ export default function MessageInput({ onSend, disabled }) {
             alt="preview"
             width={64}
             height={64}
-            className="object-cover rounded-xl border border-white/10"
+            className="object-cover rounded-xl border border-white/10 cursor-pointer hover:opacity-80 transition-all"
             unoptimized
+            onClick={() => window.dispatchEvent(new CustomEvent("openLightbox", { detail: imagePreview }))}
           />
           <button
             onClick={removeImage}
@@ -85,6 +92,7 @@ export default function MessageInput({ onSend, disabled }) {
         />
 
         <textarea
+         ref={textareaRef}
           className="flex-1 bg-transparent text-white text-sm placeholder-white/25 outline-none resize-none leading-relaxed max-h-[160px] min-h-[24px]"
           placeholder="Message OraAI..."
           value={text}

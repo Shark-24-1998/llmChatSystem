@@ -6,7 +6,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { RiRobot2Line } from "react-icons/ri";
-import { HiSparkles } from "react-icons/hi2";
+import { IoCloseSharp } from "react-icons/io5";
+import Image from "next/image";
+import StreamingIndicator from "./StreamingIndicator";
+import CodeBlock from "./CodeBlock";
 
 function UserAvatar() {
   return (
@@ -27,20 +30,17 @@ function AIAvatarIcon() {
   );
 }
 
-function TypingDots() {
-  return (
-    <div className="flex items-center gap-1 px-3.5 py-3">
-      <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
-      <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: "0.15s" }} />
-      <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: "0.3s" }} />
-    </div>
-  );
-}
+
+
 
 export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
   const [messages, setMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const bottomRef = useRef(null);
+  const accumulatorRef = useRef("");
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const isStreamingRef = useRef(false);
+
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -55,9 +55,26 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
     fetchMessages();
   }, [chatId]);
 
+  // 🔥 throttled smooth scroll — not on every single token
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!isStreamingRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  // scroll to bottom when streaming ends
+  useEffect(() => {
+    if (!isStreaming) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [isStreaming]);
+
+
+  useEffect(() => {
+    const handler = (e) => setLightboxUrl(e.detail);
+    window.addEventListener("openLightbox", handler);
+    return () => window.removeEventListener("openLightbox", handler);
+  }, []);
 
   const createChat = async (prompt) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -76,59 +93,61 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
     return chat.id;
   };
 
-const sendMessage = async (text, imageFile = null) => {
+  const sendMessage = async (text, imageFile = null) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
     let currentChatId = chatId;
     if (!currentChatId) currentChatId = await createChat(text);
 
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    const previewUrl = imageFile ? URL.createObjectURL(imageFile) : null;
+
+    setMessages((prev) => [...prev,
+    { role: "user", content: text, imageUrl: previewUrl },
+    { role: "assistant", content: "" }  // 🔥 add BEFORE fetch so indicator shows immediately
+    ]);
     setIsStreaming(true);
+    isStreamingRef.current = true;
 
     const formData = new FormData();
     formData.append("prompt", text);
     formData.append("chatId", currentChatId);
-    if (imageFile) {
-      formData.append("image", imageFile);
-    }
+    if (imageFile) formData.append("image", imageFile);
 
     const response = await fetch("/api/generate", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
+      headers: { Authorization: `Bearer ${session.access_token}` },
       body: formData,
     });
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    accumulatorRef.current = "";
 
-    // 🔥 FIX: useRef-style accumulator to avoid ESLint immutability warning
-    let accumulated = "";
-
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    // 🔥 REMOVED: setMessages for empty assistant — already added above
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       const chunk = decoder.decode(value);
-      accumulated = accumulated + chunk;  // 🔥 reassign instead of +=
+      accumulatorRef.current = accumulatorRef.current + chunk;
 
       setMessages((prev) => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: "assistant", content: accumulated };
+        copy[copy.length - 1] = { role: "assistant", content: accumulatorRef.current };
         return copy;
       });
     }
     setIsStreaming(false);
+    isStreamingRef.current = false;
   };
+
 
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full">
+    <div className="flex flex-col flex-1 min-w-0 h-full min-h-0 overflow-hidden">
 
       {/* Empty state */}
       {isEmpty && (
@@ -164,17 +183,17 @@ const sendMessage = async (text, imageFile = null) => {
 
       {/* Messages */}
       {!isEmpty && (
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
+         <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6 min-h-0">
           {messages.map((m, i) => (
             <div key={i} className={"flex gap-3 " + (m.role === "user" ? "flex-row-reverse" : "")}>
               {m.role === "user" ? <UserAvatar /> : <AIAvatarIcon />}
               <div className={"max-w-[75%] " + (m.role === "user" ? "items-end flex flex-col" : "")}>
-                {m.role === "assistant" && m.content === "" && isStreaming ? (
+                {m.role === "assistant" && m.content === "" ? (
                   <div
                     className="rounded-2xl rounded-tl-sm border border-white/[0.08]"
                     style={{ background: "rgba(255,255,255,0.05)" }}
                   >
-                    <TypingDots />
+                    <StreamingIndicator />
                   </div>
                 ) : (
                   <div
@@ -191,13 +210,58 @@ const sendMessage = async (text, imageFile = null) => {
                     }
                   >
                     {m.role === "assistant" ? (
-                      <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-white/10 prose-pre:border prose-pre:border-white/10 prose-code:text-[#a78bfa] prose-code:bg-white/10 prose-code:px-1 prose-code:rounded prose-headings:text-white prose-strong:text-white">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                     <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-headings:text-white prose-strong:text-white">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code: CodeBlock,
+                            p({ children }) {
+                              return <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>;
+                            },
+                            ul({ children }) {
+                              return <ul className="mb-3 ml-4 space-y-1 list-disc marker:text-white/30">{children}</ul>;
+                            },
+                            ol({ children }) {
+                              return <ol className="mb-3 ml-4 space-y-1 list-decimal marker:text-white/30">{children}</ol>;
+                            },
+                            h1({ children }) {
+                              return <h1 className="text-lg font-semibold text-white mb-2 mt-4">{children}</h1>;
+                            },
+                            h2({ children }) {
+                              return <h2 className="text-base font-semibold text-white mb-2 mt-3">{children}</h2>;
+                            },
+                            h3({ children }) {
+                              return <h3 className="text-sm font-semibold text-white mb-1 mt-2">{children}</h3>;
+                            },
+                            blockquote({ children }) {
+                              return (
+                                <blockquote className="border-l-2 border-[#6c63ff] pl-3 my-2 text-white/50 italic">
+                                  {children}
+                                </blockquote>
+                              );
+                            },
+                          }}
+                        >
                           {m.content}
                         </ReactMarkdown>
                       </div>
                     ) : (
-                      m.content
+                      <div className="flex flex-col gap-2">
+                        {m.imageUrl && (
+                          <Image
+                            src={m.imageUrl}
+                            alt="attached image"
+                            width={200}
+                            height={200}
+                            className="rounded-xl object-cover border border-white/10 cursor-pointer hover:opacity-80 transition-all"
+                            unoptimized
+                            onClick={() => setLightboxUrl(m.imageUrl)}
+                          />
+                        )}
+                        {m.content && (
+                          <span>{m.content}</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -205,6 +269,31 @@ const sendMessage = async (text, imageFile = null) => {
             </div>
           ))}
           <div ref={bottomRef} />
+          {/* Lightbox */}
+          {lightboxUrl && (
+            <div
+              onClick={() => setLightboxUrl(null)}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-zoom-out"
+            >
+              <div className="relative max-w-3xl max-h-[90vh] w-full px-4">
+                <Image
+                  src={lightboxUrl}
+                  alt="full preview"
+                  width={900}
+                  height={700}
+                  className="rounded-2xl object-contain w-full h-auto border border-white/10"
+                  unoptimized
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  onClick={() => setLightboxUrl(null)}
+                  className="absolute top-2 right-6 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/40 transition-all text-white"
+                >
+                  <IoCloseSharp />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

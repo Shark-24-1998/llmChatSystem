@@ -78,7 +78,7 @@ export default function ChatPage() {
       </div>
 
       {/* Main area */}
-      <div className="flex flex-col flex-1 min-w-0 h-full">
+       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
         {/* Mobile top bar */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/[0.06] md:hidden">
