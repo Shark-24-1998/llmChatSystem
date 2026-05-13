@@ -6,7 +6,6 @@ import {
   extractProfile,
   updateUserProfile,
   getUserProfile,
-  extractGoal
 } from "../services/profile.service.js";
 import { inferSkillFromBehavior } from "../services/behavior.service.js";
 import { createEmbedding } from "@/services/embedding.service.js";
@@ -27,17 +26,15 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
   // 1. Save user message
   await saveMessage(supabase, chatId, "user", prompt);
 
-  // 2. PROFILE EXTRACTION + UPDATE
-  const extractedProfile = extractProfile(prompt);
+  // 2. PROFILE EXTRACTION + UPDATE (LLM-based)
+  const extractedProfile =  extractProfile(prompt);
   if (Object.keys(extractedProfile).length > 0) {
     await updateUserProfile(supabase, userId, extractedProfile);
   }
 
-  // GOAL EXTRACTION
-  const goal = extractGoal(prompt);
-  if (goal) {
-    await updateUserProfile(supabase, userId, { current_goal: goal });
-  }
+
+
+ 
 
   // BEHAVIOR ANALYSIS
   const behavior = inferSkillFromBehavior(prompt);
@@ -112,18 +109,18 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
   // 9. RAG SEARCH
   const queryEmbedding = await createEmbedding(prompt);
   const docs = await searchDocuments(supabase, queryEmbedding);
- const context = docs.length > 0 ? docs.map(d => d.content).join("\n\n") : null;
+  const context = docs.length > 0 ? docs.map(d => d.content).join("\n\n") : null;
   console.log(docs.length > 0 ? `RAG CONTEXT: ${context}` : "RAG: no relevant docs found");
 
   // 10. BUILD FINAL CONVERSATION
   const conversationContent = buildConversation(history, summary, userProfile);
   // 🔥 only inject RAG context if relevant docs were found
-if (context) {
-  conversationContent.unshift({
-    role: "system",
-    content: `Relevant Knowledge:\n${context}`
-  });
-}
+  if (context) {
+    conversationContent.unshift({
+      role: "system",
+      content: `Relevant Knowledge:\n${context}`
+    });
+  }
 
   // 11. CALL LLM — 🔥 CHANGED: pass image params
   const providerStream = await callLLMStream(

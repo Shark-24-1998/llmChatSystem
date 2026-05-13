@@ -39,6 +39,36 @@ export default function ChatPage() {
     setSidebarOpen(false);
   };
 
+  const handleDeleteChat = async (chatId) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const res = await fetch("/api/chats", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ chatId }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      console.error("Failed to delete chat:", data);
+      return;
+    }
+
+    // if deleted chat was active → reset to first remaining chat
+    setChats(prev => {
+      const updated = prev.filter(c => c.id !== chatId);
+      if (activeChat === chatId) {
+        setActiveChat(updated.length > 0 ? updated[0].id : null);
+      }
+      return updated;
+    });
+  };
+
+
   return (
     <div
       className="flex h-screen w-screen overflow-hidden text-white"
@@ -74,11 +104,12 @@ export default function ChatPage() {
           activeChat={activeChat}
           setActiveChat={(id) => { setActiveChat(id); setSidebarOpen(false); }}
           onNewChat={handleNewChat}
+          onDeleteChat={handleDeleteChat}
         />
       </div>
 
       {/* Main area */}
-       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
         {/* Mobile top bar */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/[0.06] md:hidden">

@@ -44,12 +44,19 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!chatId) { setMessages([]); return; }
+      if (!chatId) {
+        if (!isStreamingRef.current) setMessages([]);
+        return;
+      }
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch(`/api/messages?chatId=${chatId}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const data = await res.json();
+      // While a reply is streaming, the server may still be empty or one message behind;
+      // never replace the optimistic "thinking" row with a stale fetch.
+      if (isStreamingRef.current) return;
       setMessages(data);
     };
     fetchMessages();
@@ -87,60 +94,106 @@ export default function ChatWindow({ chatId, setActiveChat, refreshChats }) {
       },
       body: JSON.stringify({ prompt }),
     });
+    if (!res.ok) return;
     const chat = await res.json();
+    if (!chat?.id) return;
     setActiveChat(chat.id);
     await refreshChats();
     return chat.id;
   };
 
   const sendMessage = async (text, imageFile = null) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    let currentChatId = chatId;
-    if (!currentChatId) currentChatId = await createChat(text);
-
     const previewUrl = imageFile ? URL.createObjectURL(imageFile) : null;
 
-    setMessages((prev) => [...prev,
-    { role: "user", content: text, imageUrl: previewUrl },
-    { role: "assistant", content: "" }  // 🔥 add BEFORE fetch so indicator shows immediately
+    // Instant feedback: user bubble + thinking row before any network (createChat / generate).
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: text, imageUrl: previewUrl },
+      { role: "assistant", content: "" },
     ]);
     setIsStreaming(true);
     isStreamingRef.current = true;
+    queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setIsStreaming(false);
+      isStreamingRef.current = false;
+      setMessages((prev) => prev.slice(0, -2));
+      return;
+    }
+
+    let currentChatId = chatId;
+    if (!currentChatId) {
+      currentChatId = await createChat(text);
+      if (!currentChatId) {
+        setIsStreaming(false);
+        isStreamingRef.current = false;
+        setMessages((prev) => prev.slice(0, -2));
+        return;
+      }
+    }
 
     const formData = new FormData();
     formData.append("prompt", text);
     formData.append("chatId", currentChatId);
     if (imageFile) formData.append("image", imageFile);
 
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      body: formData,
-    });
+    let response;
+    try {
+      response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
+    } catch {
+      setIsStreaming(false);
+      isStreamingRef.current = false;
+      setMessages((prev) => prev.slice(0, -2));
+      return;
+    }
+
+    if (!response.ok || !response.body) {
+      setIsStreaming(false);
+      isStreamingRef.current = false;
+      setMessages((prev) => prev.slice(0, -2));
+      return;
+    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     accumulatorRef.current = "";
 
-    // 🔥 REMOVED: setMessages for empty assistant — already added above
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+        const chunk = decoder.decode(value);
+        accumulatorRef.current = accumulatorRef.current + chunk;
 
-      const chunk = decoder.decode(value);
-      accumulatorRef.current = accumulatorRef.current + chunk;
-
+        setMessages((prev) => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { role: "assistant", content: accumulatorRef.current };
+          return copy;
+        });
+      }
+    } catch {
       setMessages((prev) => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: "assistant", content: accumulatorRef.current };
+        const last = copy[copy.length - 1];
+        if (last?.role === "assistant") {
+          copy[copy.length - 1] = {
+            ...last,
+            content: last.content || "Something went wrong while loading the reply.",
+          };
+        }
         return copy;
       });
+    } finally {
+      setIsStreaming(false);
+      isStreamingRef.current = false;
     }
-    setIsStreaming(false);
-    isStreamingRef.current = false;
   };
 
 

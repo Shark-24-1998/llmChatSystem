@@ -4,13 +4,12 @@ import { PROVIDERS } from "../providers/provider.registry.js";
 
 // 🔥 CHANGED: added vision flag to each model
 const MODEL_CHAIN = [
-  { provider: "openrouter", model: "google/gemma-3-4b-it:free",  vision: false },
-  { provider: "gemini",     model: "gemini-2.5-flash-lite",      vision: true  },
-  { provider: "gemini",     model: "gemini-2.5-flash",           vision: true  },
-  { provider: "gemini",     model: "gemini-3-flash-preview",     vision: true  },
-  { provider: "gemini",     model: "gemini-3.1-pro-preview",     vision: true  },
-  { provider: "openrouter", model: "qwen/qwen3.6-plus:free",     vision: false },
-];
+  { provider: "gemini",     model: "gemini-2.5-flash-lite",        vision: true  }, // primary, fast, free
+  { provider: "gemini",     model: "gemini-3-flash-preview",       vision: true  }, // newer, free tier
+  { provider: "gemini",     model: "gemini-2.5-flash",             vision: true  }, // stronger fallback
+  { provider: "openrouter", model: "openai/gpt-oss-20b:free",      vision: false }, // replaces gemma, strong
+  { provider: "openrouter", model: "qwen/qwen3.6-plus:free",       vision: false }, // last resort 
+]
 
 const MODEL_HEALTH = {};
 const COOLDOWN = 60 * 1000;

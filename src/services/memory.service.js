@@ -3,11 +3,9 @@ const MAX_MESSAGES = 10;
 export const buildConversation = (messages, summary, profile) => {
 
   const trimmed = messages.slice(-(MAX_MESSAGES - 1));
-
   const history = [];
 
-  
-  // 🔥 SUMMARY First
+  // 1. SUMMARY
   if (summary) {
     history.push({
       role: "system",
@@ -15,30 +13,49 @@ export const buildConversation = (messages, summary, profile) => {
     });
   }
 
-  // 🔥 PROFILE Second
+  // 2. PROFILE — now includes all personal facts
   if (profile && Object.keys(profile).length > 0) {
-    history.push({
-      role: "system",
-      content: `
-User Profile:
-- Skill Level: ${profile.skill_level?.value || "unknown"}
-- Learning Style: ${profile.learning_style || "unknown"}
-- Tech Stack: ${profile.tech_stack?.join(", ") || "unknown"}
-- Current Goal: ${profile.current_goal || "unknown"}
-`
-    });
+    const lines = [];
+
+    if (profile.name) lines.push(`- Name: ${profile.name}`);
+    if (profile.skill_level) lines.push(`- Skill Level: ${profile.skill_level?.value || profile.skill_level}`);
+    if (profile.learning_style) lines.push(`- Learning Style: ${profile.learning_style}`);
+    if (profile.tech_stack?.length > 0) lines.push(`- Tech Stack: ${profile.tech_stack.join(", ")}`);
+    if (profile.current_goal) lines.push(`- Current Goal: ${profile.current_goal}`);
+    if (profile.salary) lines.push(`- Salary: ${profile.salary}`);
+    if (profile.location) lines.push(`- Location: ${profile.location}`);
+    if (profile.job_title) lines.push(`- Job Title: ${profile.job_title}`);
+    if (profile.company) lines.push(`- Company: ${profile.company}`);
+    if (profile.age) lines.push(`- Age: ${profile.age}`);
+    if (profile.hobbies?.length > 0) lines.push(`- Hobbies: ${profile.hobbies.join(", ")}`);
+    if (profile.languages?.length > 0) lines.push(`- Languages: ${profile.languages.join(", ")}`);
+    if (profile.personal_notes) lines.push(`- Notes: ${profile.personal_notes}`);
+
+    if (lines.length > 0) {
+      history.push({
+        role: "system",
+        content: `User Profile:\n${lines.join("\n")}`
+      });
+    }
   }
 
+  // 3. CONFLICT RESOLUTION RULE
+  history.push({
+  role: "system",
+  content: `Important instructions for handling user information:
+- User Profile contains the most recent and up-to-date facts about the user. Always trust User Profile over anything else.
+- Documents and knowledge base contain static reference material. Use them for context and detail.
+- If User Profile and a document conflict on the same fact, always use the User Profile value as the source of truth.
+- Never tell the user their profile and documents conflict. Just silently use the most recent value from User Profile.
+- Keep answers concise and to the point unless the user explicitly asks for more detail or elaboration.
+- Only include personal profile details if they are directly relevant to the question being asked.`
+});
 
-  // 🔥 RECENT MESSAGES
+  // 4. RECENT MESSAGES
   trimmed.forEach(m => {
-    history.push({
-      role: m.role,
-      content: m.content
-    });
+    history.push({ role: m.role, content: m.content });
   });
 
   console.log("FINAL SENT:", history.length);
-
   return history;
 };
