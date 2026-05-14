@@ -618,16 +618,40 @@ export default function ChatSidebar({ chats, setActiveChat, activeChat, onNewCha
         <DocumentPanel />
       )}
 
+
       {/* Footer */}
       <div className="px-4 py-4 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-            style={{ background: "linear-gradient(135deg, #6c63ff, #1a8fff)" }}
-          >
-            <RiRobot2Line />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              style={{ background: "linear-gradient(135deg, #6c63ff, #1a8fff)" }}
+            >
+              <RiRobot2Line />
+            </div>
+            <span className="text-xs text-white/35 truncate">AI Chat System</span>
           </div>
-          <span className="text-xs text-white/35 truncate">AI Chat System</span>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = "/";
+            }}
+            className="text-xs px-2.5 py-1.5 rounded-lg transition-all flex-shrink-0"
+            style={{
+              color: "rgba(255,255,255,0.35)",
+              border: "1px solid rgba(255,255,255,0.08)"
+            }}
+            onMouseEnter={e => {
+              e.target.style.color = "rgba(255,100,100,0.8)";
+              e.target.style.borderColor = "rgba(255,100,100,0.3)";
+            }}
+            onMouseLeave={e => {
+              e.target.style.color = "rgba(255,255,255,0.35)";
+              e.target.style.borderColor = "rgba(255,255,255,0.08)";
+            }}
+          >
+            Logout
+          </button>
         </div>
       </div>
     </div>
