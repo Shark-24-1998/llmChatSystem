@@ -12,7 +12,6 @@ import { createEmbedding } from "@/services/embedding.service.js";
 import { searchDocuments } from "@/services/document.service.js";
 import { webSearch } from "@/tools/webSearch.js";
 
-// 🔥 CHANGED: added imageBase64, imageMimeType
 export const generateController = async (supabase, prompt, chatId, imageBase64 = null, imageMimeType = null) => {
 
   const { data: userData } = await supabase.auth.getUser();
@@ -22,20 +21,16 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
   if (!chatId) throw new Error("chatId required");
 
   console.log("FINAL USER ID:", userId);
-  console.log("HAS IMAGE:", !!imageBase64); // 🔥 NEW
+  console.log("HAS IMAGE:", !!imageBase64);
 
   // 1. Save user message
   await saveMessage(supabase, chatId, "user", prompt);
 
-  // 2. PROFILE EXTRACTION + UPDATE (LLM-based)
+  // 2. PROFILE EXTRACTION + UPDATE
   const extractedProfile = extractProfile(prompt);
   if (Object.keys(extractedProfile).length > 0) {
     await updateUserProfile(supabase, userId, extractedProfile);
   }
-
-
-
-
 
   // BEHAVIOR ANALYSIS
   const behavior = inferSkillFromBehavior(prompt);
@@ -115,7 +110,7 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
 
   // 10. BUILD FINAL CONVERSATION
   const conversationContent = buildConversation(history, summary, userProfile);
-  // 🔥 only inject RAG context if relevant docs were found
+
   if (context) {
     conversationContent.unshift({
       role: "system",
@@ -123,16 +118,21 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
     });
   }
 
-
-
-  
   // 11. CALL LLM WITH TOOL SUPPORT
   let finalConversation = conversationContent;
 
-  // first call — let AI decide if it needs to search
-  
-  const firstResponse = await callLLM(finalConversation);
+  // inject today's date for accurate search queries
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
 
+  const conversationWithDate = [
+    { role: "system", content: `Today's date is ${today}. Always use this exact date when searching for recent events.` },
+    ...finalConversation
+  ];
+
+  // first call — let AI decide if it needs to search
+  const firstResponse = await callLLM(conversationWithDate);
   console.log("FIRST RESPONSE:", firstResponse?.slice(0, 100));
 
   // check if AI wants to search
@@ -152,25 +152,27 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
 
         console.log("WEB SEARCH RESULTS INJECTED");
 
-        // inject search results and ask AI to answer properly
         finalConversation = [
-          ...conversationContent,
+          ...conversationWithDate,
           {
             role: "assistant",
             content: firstResponse
           },
           {
             role: "system",
-            content: `Web search results for "${searchQuery}":\n\n${searchContext}\n\nNow answer the user's question using these results. Be concise and accurate.`
+            content: `Web search results for "${searchQuery}":\n\n${searchContext}\n\nNow answer the user's question using ONLY these search results. Be concise and accurate. Do not mix with your training data.`
           }
         ];
       }
     } catch (err) {
       console.error("WEB SEARCH ERROR:", err.message);
     }
+  } else {
+    // no search needed — use date-aware conversation
+    finalConversation = conversationWithDate;
   }
 
-  // final streaming call with results injected
+  // final streaming call
   const providerStream = await callLLMStream(
     finalConversation,
     imageBase64,
@@ -192,7 +194,12 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
       }
 
       // 12. SAVE ASSISTANT RESPONSE
-      await saveMessage(supabase, chatId, "assistant", assistantResponse);
+      // clean [SEARCH:...] from response just in case
+      const cleanedResponse = assistantResponse
+        .replace(/\[SEARCH:.*?\]/gi, "")
+        .trim();
+
+      await saveMessage(supabase, chatId, "assistant", cleanedResponse);
       controller.close();
     },
   });
