@@ -1,4 +1,4 @@
-import { callLLMStream } from "../services/ai.gateway.js";
+import { callLLM, callLLMStream } from "../services/ai.gateway.js";
 import { buildConversation } from "../services/memory.service.js";
 import { getMessages, saveMessage } from "../models/message.model.js";
 import { updateSummary } from "@/services/summarize.service.js";
@@ -10,6 +10,7 @@ import {
 import { inferSkillFromBehavior } from "../services/behavior.service.js";
 import { createEmbedding } from "@/services/embedding.service.js";
 import { searchDocuments } from "@/services/document.service.js";
+import { webSearch } from "@/tools/webSearch.js";
 
 // 🔥 CHANGED: added imageBase64, imageMimeType
 export const generateController = async (supabase, prompt, chatId, imageBase64 = null, imageMimeType = null) => {
@@ -27,14 +28,14 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
   await saveMessage(supabase, chatId, "user", prompt);
 
   // 2. PROFILE EXTRACTION + UPDATE (LLM-based)
-  const extractedProfile =  extractProfile(prompt);
+  const extractedProfile = extractProfile(prompt);
   if (Object.keys(extractedProfile).length > 0) {
     await updateUserProfile(supabase, userId, extractedProfile);
   }
 
 
 
- 
+
 
   // BEHAVIOR ANALYSIS
   const behavior = inferSkillFromBehavior(prompt);
@@ -122,9 +123,56 @@ export const generateController = async (supabase, prompt, chatId, imageBase64 =
     });
   }
 
-  // 11. CALL LLM — 🔥 CHANGED: pass image params
+
+
+  
+  // 11. CALL LLM WITH TOOL SUPPORT
+  let finalConversation = conversationContent;
+
+  // first call — let AI decide if it needs to search
+  
+  const firstResponse = await callLLM(finalConversation);
+
+  console.log("FIRST RESPONSE:", firstResponse?.slice(0, 100));
+
+  // check if AI wants to search
+  const searchMatch = firstResponse?.match(/\[SEARCH:\s*(.+?)\]/i);
+
+  if (searchMatch) {
+    const searchQuery = searchMatch[1].trim();
+    console.log("AI TRIGGERED SEARCH:", searchQuery);
+
+    try {
+      const results = await webSearch(searchQuery);
+
+      if (results.length > 0) {
+        const searchContext = results
+          .map(r => `${r.title}\n${r.snippet}\n${r.link}`)
+          .join("\n\n");
+
+        console.log("WEB SEARCH RESULTS INJECTED");
+
+        // inject search results and ask AI to answer properly
+        finalConversation = [
+          ...conversationContent,
+          {
+            role: "assistant",
+            content: firstResponse
+          },
+          {
+            role: "system",
+            content: `Web search results for "${searchQuery}":\n\n${searchContext}\n\nNow answer the user's question using these results. Be concise and accurate.`
+          }
+        ];
+      }
+    } catch (err) {
+      console.error("WEB SEARCH ERROR:", err.message);
+    }
+  }
+
+  // final streaming call with results injected
   const providerStream = await callLLMStream(
-    conversationContent,
+    finalConversation,
     imageBase64,
     imageMimeType
   );

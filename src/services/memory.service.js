@@ -41,17 +41,36 @@ export const buildConversation = (messages, summary, profile) => {
 
   // 3. CONFLICT RESOLUTION RULE
   history.push({
-  role: "system",
-  content: `Important instructions for handling user information:
+    role: "system",
+    content: `Important instructions for handling user information:
 - User Profile contains the most recent and up-to-date facts about the user. Always trust User Profile over anything else.
 - Documents and knowledge base contain static reference material. Use them for context and detail.
 - If User Profile and a document conflict on the same fact, always use the User Profile value as the source of truth.
 - Never tell the user their profile and documents conflict. Just silently use the most recent value from User Profile.
 - Keep answers concise and to the point unless the user explicitly asks for more detail or elaboration.
 - Only include personal profile details if they are directly relevant to the question being asked.`
-});
+  });
 
-  // 4. RECENT MESSAGES
+  // 4. WEB SEARCH TOOL INSTRUCTION
+  history.push({
+    role: "system",
+    content: `You have access to a real-time web search tool.
+
+When the user asks about anything that requires current or up-to-date information (news, weather, sports scores, stock prices, recent events, current leaders, etc.), you MUST use it.
+
+To use web search, respond with ONLY this on the first line:
+[SEARCH: your search query]
+
+Examples:
+- User asks "who won IPL yesterday?" → respond: [SEARCH: IPL match result May 13 2026]
+- User asks "weather in Pune today?" → respond: [SEARCH: Pune weather today]
+- User asks "latest AI news?" → respond: [SEARCH: latest AI news May 2026]
+
+If the question does NOT need real-time data, answer directly without searching.
+Never make up current information — always search instead of guessing.`
+  });
+
+  // 5. RECENT MESSAGES
   trimmed.forEach(m => {
     history.push({ role: m.role, content: m.content });
   });
