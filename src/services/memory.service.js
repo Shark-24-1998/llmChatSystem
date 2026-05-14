@@ -52,9 +52,11 @@ export const buildConversation = (messages, summary, profile) => {
   });
 
   // 4. WEB SEARCH TOOL INSTRUCTION
-  history.push({
-    role: "system",
-    content: `You have access to a real-time web search tool.
+ // 4. WEB SEARCH TOOL INSTRUCTION
+history.push({
+  role: "system",
+  content: `You have access to a real-time web search tool.
+Today's date is: ${new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 
 When the user asks about anything that requires current or up-to-date information (news, weather, sports scores, stock prices, recent events, current leaders, etc.), you MUST use it.
 
@@ -66,9 +68,13 @@ Examples:
 - User asks "weather in Pune today?" → respond: [SEARCH: Pune weather today]
 - User asks "latest AI news?" → respond: [SEARCH: latest AI news May 2026]
 
-If the question does NOT need real-time data, answer directly without searching.
-Never make up current information — always search instead of guessing.`
-  });
+CRITICAL RULES:
+- Always use today's date when searching for recent events
+- When search results are provided, use ONLY those results to answer
+- NEVER mix search results with your training data
+- If search results don't have the answer, say "I couldn't find accurate information"
+- Never guess or make up sports scores, match results, or current events`
+});
 
   // 5. RECENT MESSAGES
   trimmed.forEach(m => {
